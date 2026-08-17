@@ -150,9 +150,12 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function poolLabel(swim) {
-  const len = swim.poolLength ? `${swim.poolLength}m` : "";
+function venueLabel(swim) {
   const name = swim.poolName || "";
+  if ((swim.venue || "pool") === "openwater") {
+    return name ? `Open water · ${name}` : "Open water";
+  }
+  const len = swim.poolLength ? `${swim.poolLength}m` : "";
   if (len && name) return `${len} · ${name}`;
   return len || name;
 }
@@ -174,7 +177,7 @@ function renderSwimCard(swim) {
   li.className = "race-card";
   li.dataset.id = swim.id;
 
-  const pool = poolLabel(swim);
+  const pool = venueLabel(swim);
   const pace = pace100(swim.movementTime, swim.distance);
 
   li.innerHTML = `
@@ -239,7 +242,7 @@ function openDetail(id) {
   currentId = id;
 
   const content = document.getElementById("detailContent");
-  const pool = poolLabel(swim);
+  const pool = venueLabel(swim);
 
   content.innerHTML = `
     <div class="detail-name-row">
@@ -305,14 +308,24 @@ function setInvalidTime(target, isInvalid) {
 
 const distanceInput = document.getElementById("distanceInput");
 const dateInput = document.getElementById("dateInput");
+const venueSelect = document.getElementById("venueInput");
+const poolLengthWrap = document.getElementById("poolLengthWrap");
 const poolLengthSelect = document.getElementById("poolLengthSelect");
 const poolLengthCustomWrap = document.getElementById("poolLengthCustomWrap");
 const poolLengthCustomInput = document.getElementById("poolLengthCustomInput");
+const poolNameLabel = document.getElementById("poolNameLabel");
 const poolNameInput = document.getElementById("poolNameInput");
 
-poolLengthSelect.addEventListener("change", () => {
-  poolLengthCustomWrap.classList.toggle("hidden", poolLengthSelect.value !== "custom");
-});
+function updatePoolFieldsVisibility() {
+  const isPool = venueSelect.value !== "openwater";
+  poolLengthWrap.classList.toggle("hidden", !isPool);
+  poolLengthCustomWrap.classList.toggle("hidden", !isPool || poolLengthSelect.value !== "custom");
+  poolNameLabel.textContent = isPool ? "Pool name" : "Location";
+  poolNameInput.placeholder = isPool ? "e.g. Sportfondsenbad" : "e.g. Loosdrecht lake";
+}
+
+venueSelect.addEventListener("change", updatePoolFieldsVisibility);
+poolLengthSelect.addEventListener("change", updatePoolFieldsVisibility);
 
 function getPoolLength() {
   if (poolLengthSelect.value === "custom") return Number(poolLengthCustomInput.value) || 0;
@@ -328,8 +341,9 @@ function updateComputedDisplays() {
 function resetForm() {
   document.getElementById("swimForm").reset();
   typeSelect.value = "";
+  venueSelect.value = "pool";
   poolLengthSelect.value = "25";
-  poolLengthCustomWrap.classList.add("hidden");
+  updatePoolFieldsVisibility();
   for (const t of ["totalTime", "movementTime"]) {
     setHMS(t, 0);
     setInvalidTime(t, false);
@@ -345,6 +359,7 @@ function openForm(swim) {
 
   typeSelect.value = (swim && swim.type) || "";
   dateInput.value = (swim && swim.date) || todayStr();
+  venueSelect.value = (swim && swim.venue) || "pool";
 
   if (swim) {
     distanceInput.value = swim.distance || "";
@@ -352,9 +367,9 @@ function openForm(swim) {
       poolLengthSelect.value = String(swim.poolLength);
     } else if (swim.poolLength) {
       poolLengthSelect.value = "custom";
-      poolLengthCustomWrap.classList.remove("hidden");
       poolLengthCustomInput.value = swim.poolLength;
     }
+    updatePoolFieldsVisibility();
     poolNameInput.value = swim.poolName || "";
     setHMS("totalTime", swim.totalTime);
     setHMS("movementTime", swim.movementTime);
@@ -454,6 +469,8 @@ document.getElementById("swimForm").addEventListener("submit", async (e) => {
     return;
   }
 
+  const isPool = venueSelect.value !== "openwater";
+
   const swim = {
     id: currentId || `${Date.now()}-${Math.floor(performance.now())}`,
     type: typeSelect.value,
@@ -461,7 +478,8 @@ document.getElementById("swimForm").addEventListener("submit", async (e) => {
     distance,
     totalTime,
     movementTime,
-    poolLength: getPoolLength(),
+    venue: venueSelect.value,
+    poolLength: isPool ? getPoolLength() : null,
     poolName: poolNameInput.value.trim() || null,
   };
 

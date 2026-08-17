@@ -108,21 +108,30 @@
     </label>
 
     <fieldset class="segment">
-      <legend>Pool</legend>
+      <legend>Location</legend>
       <label class="subfield">
-        <span>Length</span>
-        <select id="poolLengthSelect">
-          <option value="25">25 m</option>
-          <option value="50">50 m</option>
-          <option value="custom">Other...</option>
+        <span>Venue</span>
+        <select id="venueInput">
+          <option value="pool">Pool</option>
+          <option value="openwater">Open water</option>
         </select>
       </label>
-      <label class="subfield hidden" id="poolLengthCustomWrap">
-        <span>Custom length (m)</span>
-        <input type="number" id="poolLengthCustomInput" min="0" step="any" inputmode="decimal">
-      </label>
+      <div id="poolLengthWrap">
+        <label class="subfield">
+          <span>Length</span>
+          <select id="poolLengthSelect">
+            <option value="25">25 m</option>
+            <option value="50">50 m</option>
+            <option value="custom">Other...</option>
+          </select>
+        </label>
+        <label class="subfield hidden" id="poolLengthCustomWrap">
+          <span>Custom length (m)</span>
+          <input type="number" id="poolLengthCustomInput" min="0" step="any" inputmode="decimal">
+        </label>
+      </div>
       <label class="subfield">
-        <span>Name</span>
+        <span id="poolNameLabel">Pool name</span>
         <input type="text" id="poolNameInput" list="poolNames" placeholder="e.g. Sportfondsenbad" autocomplete="off">
         <datalist id="poolNames"></datalist>
       </label>
