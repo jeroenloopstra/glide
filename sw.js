@@ -1,4 +1,4 @@
-const CACHE_NAME = "glide-v3";
+const CACHE_NAME = "glide-v4";
 const ASSETS = [
   "./",
   "./index.html",

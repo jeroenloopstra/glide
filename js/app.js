@@ -2,6 +2,10 @@ const listView = document.getElementById("listView");
 const detailView = document.getElementById("detailView");
 const formView = document.getElementById("formView");
 const settingsView = document.getElementById("settingsView");
+const progressView = document.getElementById("progressView");
+const bottomNav = document.getElementById("bottomNav");
+const navListBtn = document.getElementById("navListBtn");
+const navProgressBtn = document.getElementById("navProgressBtn");
 const swimList = document.getElementById("swimList");
 const emptyState = document.getElementById("emptyState");
 const emptyTitle = document.getElementById("emptyTitle");
@@ -56,7 +60,7 @@ document.getElementById("settingsToggle").addEventListener("click", () => {
 });
 
 document.getElementById("settingsBackBtn").addEventListener("click", () => {
-  showView(listView);
+  showView(lastMainView);
 });
 
 const TYPES = [
@@ -96,11 +100,29 @@ typeFilterSelect.addEventListener("change", () => {
 
 let swims = [];
 let currentId = null;
+let lastMainView = listView;
 
 function showView(view) {
-  for (const v of [listView, detailView, formView, settingsView]) v.classList.add("hidden");
+  for (const v of [listView, detailView, formView, settingsView, progressView]) v.classList.add("hidden");
   view.classList.remove("hidden");
+
+  const isMainView = view === listView || view === progressView;
+  bottomNav.classList.toggle("hidden", !isMainView);
+  if (isMainView) {
+    lastMainView = view;
+    navListBtn.classList.toggle("active", view === listView);
+    navProgressBtn.classList.toggle("active", view === progressView);
+  }
 }
+
+navListBtn.addEventListener("click", () => {
+  showView(listView);
+});
+
+navProgressBtn.addEventListener("click", () => {
+  showView(progressView);
+  renderProgressChart();
+});
 
 function pad(n) {
   return String(n).padStart(2, "0");
@@ -181,7 +203,7 @@ function renderSwimCard(swim) {
   const pace = pace100(swim.movementTime, swim.distance);
 
   li.innerHTML = `
-    <div class="placeholder">${formatDistanceShort(swim.distance)}</div>
+    <div class="placeholder placeholder-${swim.type || "training"}">${formatDistanceShort(swim.distance)}</div>
     <div class="info">
       <div class="name">${swim.distance || 0} m</div>
       <div class="meta">
@@ -233,6 +255,150 @@ async function refreshList() {
   }
 }
 
+const rangeSelect = document.getElementById("rangeSelect");
+const chartContainer = document.getElementById("chartContainer");
+const chartEmptyState = document.getElementById("chartEmptyState");
+const chartLegend = document.getElementById("chartLegend");
+
+let chartRange = localStorage.getItem("glideChartRange") || "4w";
+rangeSelect.value = chartRange;
+rangeSelect.addEventListener("change", () => {
+  chartRange = rangeSelect.value;
+  localStorage.setItem("glideChartRange", chartRange);
+  renderProgressChart();
+});
+
+function chartRangeStart(range, pointDates) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (range === "all") {
+    if (pointDates.length === 0) return today;
+    return new Date(Math.min(...pointDates.map((d) => d.getTime())));
+  }
+  const start = new Date(today);
+  if (range === "6m") start.setMonth(start.getMonth() - 6);
+  else if (range === "1y") start.setFullYear(start.getFullYear() - 1);
+  else start.setDate(start.getDate() - 28);
+  return start;
+}
+
+function linearRegression(xs, ys) {
+  const n = xs.length;
+  const sumX = xs.reduce((a, b) => a + b, 0);
+  const sumY = ys.reduce((a, b) => a + b, 0);
+  const sumXY = xs.reduce((a, x, i) => a + x * ys[i], 0);
+  const sumXX = xs.reduce((a, x) => a + x * x, 0);
+  const denom = n * sumXX - sumX * sumX;
+  if (denom === 0) return null;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  return { slope, intercept };
+}
+
+async function renderProgressChart() {
+  const allSwims = await SwimStore.getAll();
+  const withPace = allSwims
+    .filter((s) => s.distance > 0 && s.movementTime > 0 && s.date)
+    .map((s) => ({
+      swim: s,
+      date: new Date(s.date + "T00:00:00"),
+      paceSec: s.movementTime / (s.distance / 100),
+    }));
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const rangeStart = chartRangeStart(chartRange, withPace.map((p) => p.date));
+  const points = withPace.filter((p) => p.date >= rangeStart).sort((a, b) => a.date - b.date);
+
+  const hasPoints = points.length > 0;
+  chartEmptyState.classList.toggle("hidden", hasPoints);
+  chartContainer.classList.toggle("hidden", !hasPoints);
+  chartLegend.classList.toggle("hidden", !hasPoints);
+  if (!hasPoints) {
+    chartContainer.innerHTML = "";
+    chartLegend.innerHTML = "";
+    return;
+  }
+
+  const xMin = rangeStart.getTime();
+  const xMax = Math.max(today.getTime(), xMin + 86400000);
+
+  const paceValues = points.map((p) => p.paceSec);
+  let yMin = Math.min(...paceValues);
+  let yMax = Math.max(...paceValues);
+  if (yMin === yMax) {
+    yMin -= 5;
+    yMax += 5;
+  } else {
+    const yPad = (yMax - yMin) * 0.15;
+    yMin -= yPad;
+    yMax += yPad;
+  }
+  yMin = Math.max(0, yMin);
+
+  const W = 320;
+  const H = 190;
+  const padLeft = 40;
+  const padRight = 12;
+  const padTop = 12;
+  const padBottom = 26;
+  const plotW = W - padLeft - padRight;
+  const plotH = H - padTop - padBottom;
+
+  const xPix = (time) => padLeft + ((time - xMin) / (xMax - xMin)) * plotW;
+  const yPix = (pace) => padTop + (1 - (pace - yMin) / (yMax - yMin)) * plotH;
+
+  let trendLineSvg = "";
+  const reg = points.length >= 2
+    ? linearRegression(points.map((p) => (p.date.getTime() - xMin) / 86400000), paceValues)
+    : null;
+  if (reg) {
+    const xEndDays = (xMax - xMin) / 86400000;
+    const y1 = reg.intercept;
+    const y2 = reg.intercept + reg.slope * xEndDays;
+    trendLineSvg = `<line class="chart-trend-line" x1="${xPix(xMin).toFixed(1)}" y1="${yPix(y1).toFixed(1)}" x2="${xPix(xMax).toFixed(1)}" y2="${yPix(y2).toFixed(1)}" />`;
+  }
+
+  const dotsSvg = points.map((p) => {
+    const cx = xPix(p.date.getTime()).toFixed(1);
+    const cy = yPix(p.paceSec).toFixed(1);
+    const title = `${formatDate(p.swim.date)} — ${formatPace(p.paceSec)} /100m`;
+    return `<circle class="chart-dot" cx="${cx}" cy="${cy}" r="5" style="fill:var(--type-${p.swim.type || "training"})"><title>${escapeHtml(title)}</title></circle>`;
+  }).join("");
+
+  const yTickCount = 4;
+  const yTicksSvg = [];
+  for (let i = 0; i <= yTickCount; i++) {
+    const val = yMin + (yMax - yMin) * (i / yTickCount);
+    const y = yPix(val).toFixed(1);
+    yTicksSvg.push(`<text class="chart-tick-label" x="${padLeft - 6}" y="${y}" text-anchor="end" dominant-baseline="middle">${formatPace(val)}</text>`);
+  }
+
+  const xTickCount = 3;
+  const xTicksSvg = [];
+  for (let i = 0; i <= xTickCount; i++) {
+    const t = xMin + (xMax - xMin) * (i / xTickCount);
+    const x = xPix(t).toFixed(1);
+    const label = new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    xTicksSvg.push(`<text class="chart-tick-label" x="${x}" y="${H - padBottom + 15}" text-anchor="middle">${label}</text>`);
+  }
+
+  chartContainer.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}">
+      <line class="chart-axis" x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${H - padBottom}" />
+      <line class="chart-axis" x1="${padLeft}" y1="${H - padBottom}" x2="${W - padRight}" y2="${H - padBottom}" />
+      ${yTicksSvg.join("")}
+      ${xTicksSvg.join("")}
+      ${trendLineSvg}
+      ${dotsSvg}
+    </svg>
+  `;
+
+  chartLegend.innerHTML = TYPES.map(
+    (t) => `<span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--type-${t.value})"></span>${t.label}</span>`
+  ).join("");
+}
+
 const PENCIL_ICON = `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
 const TRASH_ICON = `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/></svg>`;
 
@@ -276,7 +442,7 @@ async function deleteCurrentSwim() {
   await SwimStore.remove(currentId);
   currentId = null;
   await refreshList();
-  showView(listView);
+  showView(lastMainView);
 }
 
 function hmsInputs(target) {
@@ -390,11 +556,11 @@ document.getElementById("emptyAddBtn").addEventListener("click", () => {
 });
 
 document.getElementById("backBtn").addEventListener("click", () => {
-  showView(listView);
+  showView(lastMainView);
 });
 
 document.getElementById("cancelBtn").addEventListener("click", () => {
-  showView(currentId ? detailView : listView);
+  showView(currentId ? detailView : lastMainView);
 });
 
 for (const target of ["totalTime", "movementTime"]) {
