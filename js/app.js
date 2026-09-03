@@ -428,6 +428,12 @@ function openDetail(id) {
       <tr><td>Total time</td><td>${formatSeconds(swim.totalTime)}${pace100Label(swim.totalTime, swim.distance) ? `<span class="pace">${pace100Label(swim.totalTime, swim.distance)}</span>` : ""}</td></tr>
       <tr><td>Movement time</td><td>${formatSeconds(swim.movementTime)}${pace100Label(swim.movementTime, swim.distance) ? `<span class="pace">${pace100Label(swim.movementTime, swim.distance)}</span>` : ""}</td></tr>
     </table>
+    ${swim.splits && swim.splits.length ? `
+    <h4 class="splits-heading">Splits</h4>
+    <table class="detail-table">
+      ${swim.splits.map((s, i) => `<tr><td>Split ${i + 1} (${s.distance} m)</td><td>${formatSeconds(s.time)}${pace100Label(s.time, s.distance) ? `<span class="pace">${pace100Label(s.time, s.distance)}</span>` : ""}</td></tr>`).join("")}
+    </table>
+    ` : ""}
   `;
 
   document.getElementById("editBtn").addEventListener("click", () => openForm(swim));
@@ -498,6 +504,58 @@ function getPoolLength() {
   return Number(poolLengthSelect.value) || 0;
 }
 
+const splitsList = document.getElementById("splitsList");
+
+function addSplitRow(distance, seconds) {
+  const row = document.createElement("div");
+  row.className = "split-row";
+  row.innerHTML = `
+    <input type="number" class="split-distance" placeholder="m" min="0" step="any" inputmode="decimal">
+    <div class="hms split-hms">
+      <input type="number" min="0" max="59" placeholder="hh" class="h">
+      <input type="number" min="0" max="59" placeholder="mm" class="m">
+      <input type="number" min="0" max="59" placeholder="ss" class="s">
+    </div>
+    <span class="split-pace"></span>
+    <button type="button" class="split-remove" aria-label="Remove split">×</button>
+  `;
+
+  const distInput = row.querySelector(".split-distance");
+  const hInput = row.querySelector(".h");
+  const mInput = row.querySelector(".m");
+  const sInput = row.querySelector(".s");
+  const paceEl = row.querySelector(".split-pace");
+
+  if (distance) distInput.value = distance;
+  if (seconds) {
+    hInput.value = Math.floor(seconds / 3600) || "";
+    mInput.value = Math.floor((seconds % 3600) / 60) || "";
+    sInput.value = seconds % 60 || "";
+  }
+
+  function updateRowPace() {
+    const d = Number(distInput.value) || 0;
+    const t = secondsFromHMS(hInput.value, mInput.value, sInput.value);
+    paceEl.textContent = pace100Label(t, d);
+  }
+  [distInput, hInput, mInput, sInput].forEach((el) => el.addEventListener("input", updateRowPace));
+  row.querySelector(".split-remove").addEventListener("click", () => row.remove());
+
+  updateRowPace();
+  splitsList.appendChild(row);
+}
+
+function getSplitsFromForm() {
+  return Array.from(splitsList.querySelectorAll(".split-row"))
+    .map((row) => ({
+      distance: Number(row.querySelector(".split-distance").value) || 0,
+      time: secondsFromHMS(row.querySelector(".h").value, row.querySelector(".m").value, row.querySelector(".s").value),
+    }))
+    .filter((s) => s.distance > 0 && s.time > 0);
+}
+
+document.getElementById("addSplitBtn").addEventListener("click", () => addSplitRow());
+
 function updateComputedDisplays() {
   const distance = Number(distanceInput.value) || 0;
   document.getElementById("totalPaceDisplay").textContent = pace100Label(getHMS("totalTime"), distance);
@@ -510,6 +568,7 @@ function resetForm() {
   venueSelect.value = "pool";
   poolLengthSelect.value = "25";
   updatePoolFieldsVisibility();
+  splitsList.innerHTML = "";
   for (const t of ["totalTime", "movementTime"]) {
     setHMS(t, 0);
     setInvalidTime(t, false);
@@ -540,6 +599,7 @@ function openForm(swim) {
     setHMS("totalTime", swim.totalTime);
     setHMS("movementTime", swim.movementTime);
     updateComputedDisplays();
+    (swim.splits || []).forEach((s) => addSplitRow(s.distance, s.time));
   }
 
   showView(formView);
@@ -647,6 +707,7 @@ document.getElementById("swimForm").addEventListener("submit", async (e) => {
     venue: venueSelect.value,
     poolLength: isPool ? getPoolLength() : null,
     poolName: poolNameInput.value.trim() || null,
+    splits: getSplitsFromForm(),
   };
 
   await SwimStore.put(swim);

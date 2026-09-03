@@ -506,6 +506,15 @@ body {
   border-bottom: none;
 }
 
+.splits-heading {
+  margin: 18px 0 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
 .detail-header {
   display: flex;
   align-items: center;
@@ -719,4 +728,59 @@ body {
   font-size: 16px;
   background: var(--color-surface);
   color: var(--color-text);
+}
+
+.split-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.split-row .split-distance {
+  width: 64px;
+  flex-shrink: 0;
+  padding: 10px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  text-align: center;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.split-row .split-hms {
+  flex: 1;
+}
+
+.split-row .split-pace {
+  width: 66px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-brand-dark);
+  text-align: center;
+}
+
+.split-remove {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-bg);
+  color: var(--color-muted);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.add-split-btn {
+  width: 100%;
+  border: 1px dashed var(--color-border);
+  background: none;
+  color: var(--color-brand);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
 }
