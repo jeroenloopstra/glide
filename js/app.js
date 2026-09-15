@@ -346,7 +346,7 @@ async function renderProgressChart() {
   const plotH = H - padTop - padBottom;
 
   const xPix = (time) => padLeft + ((time - xMin) / (xMax - xMin)) * plotW;
-  const yPix = (pace) => padTop + (1 - (pace - yMin) / (yMax - yMin)) * plotH;
+  const yPix = (pace) => padTop + ((pace - yMin) / (yMax - yMin)) * plotH;
 
   let trendLineSvg = "";
   const reg = points.length >= 2
