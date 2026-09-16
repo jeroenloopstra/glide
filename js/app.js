@@ -260,6 +260,9 @@ const chartContainer = document.getElementById("chartContainer");
 const chartEmptyState = document.getElementById("chartEmptyState");
 const chartLegend = document.getElementById("chartLegend");
 
+const CHART_W = 320;
+const CHART_H = 190;
+
 let chartRange = localStorage.getItem("glideChartRange") || "4w";
 rangeSelect.value = chartRange;
 rangeSelect.addEventListener("change", () => {
@@ -336,8 +339,8 @@ async function renderProgressChart() {
   }
   yMin = Math.max(0, yMin);
 
-  const W = 320;
-  const H = 190;
+  const W = CHART_W;
+  const H = CHART_H;
   const padLeft = 40;
   const padRight = 12;
   const padTop = 12;
@@ -356,14 +359,15 @@ async function renderProgressChart() {
     const xEndDays = (xMax - xMin) / 86400000;
     const y1 = reg.intercept;
     const y2 = reg.intercept + reg.slope * xEndDays;
-    trendLineSvg = `<line class="chart-trend-line" x1="${xPix(xMin).toFixed(1)}" y1="${yPix(y1).toFixed(1)}" x2="${xPix(xMax).toFixed(1)}" y2="${yPix(y2).toFixed(1)}" />`;
+    trendLineSvg = `<line class="chart-trend-line" clip-path="url(#chartPlotClip)" x1="${xPix(xMin).toFixed(1)}" y1="${yPix(y1).toFixed(1)}" x2="${xPix(xMax).toFixed(1)}" y2="${yPix(y2).toFixed(1)}" />`;
   }
 
   const dotsSvg = points.map((p) => {
     const cx = xPix(p.date.getTime()).toFixed(1);
     const cy = yPix(p.paceSec).toFixed(1);
-    const title = `${formatDate(p.swim.date)} — ${formatPace(p.paceSec)} /100m`;
-    return `<circle class="chart-dot" cx="${cx}" cy="${cy}" r="5" style="fill:var(--type-${p.swim.type || "training"})"><title>${escapeHtml(title)}</title></circle>`;
+    const dateLabel = escapeHtml(formatDate(p.swim.date));
+    const paceLabel = escapeHtml(`${formatPace(p.paceSec)} /100m`);
+    return `<circle class="chart-dot" data-date="${dateLabel}" data-pace="${paceLabel}" cx="${cx}" cy="${cy}" r="6"><title>${dateLabel} — ${paceLabel}</title></circle><circle class="chart-dot-fill" cx="${cx}" cy="${cy}" r="5" style="fill:var(--type-${p.swim.type || "training"})"></circle>`;
   }).join("");
 
   const yTickCount = 4;
@@ -385,12 +389,18 @@ async function renderProgressChart() {
 
   chartContainer.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}">
+      <defs>
+        <clipPath id="chartPlotClip">
+          <rect x="${padLeft}" y="${padTop}" width="${plotW}" height="${plotH}" />
+        </clipPath>
+      </defs>
       <line class="chart-axis" x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${H - padBottom}" />
       <line class="chart-axis" x1="${padLeft}" y1="${H - padBottom}" x2="${W - padRight}" y2="${H - padBottom}" />
       ${yTicksSvg.join("")}
       ${xTicksSvg.join("")}
       ${trendLineSvg}
       ${dotsSvg}
+      <g id="chartTooltip"></g>
     </svg>
   `;
 
@@ -398,6 +408,52 @@ async function renderProgressChart() {
     (t) => `<span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--type-${t.value})"></span>${t.label}</span>`
   ).join("");
 }
+
+function hideChartTooltip() {
+  const g = chartContainer.querySelector("#chartTooltip");
+  if (g) g.innerHTML = "";
+}
+
+function showChartTooltip(circle) {
+  const g = chartContainer.querySelector("#chartTooltip");
+  if (!g) return;
+
+  const cx = parseFloat(circle.getAttribute("cx"));
+  const cy = parseFloat(circle.getAttribute("cy"));
+  const dateText = circle.dataset.date;
+  const paceText = circle.dataset.pace;
+
+  const padX = 8;
+  const padY = 6;
+  const lineH = 13;
+  const charW = 5.6;
+  const boxW = padX * 2 + Math.max(dateText.length, paceText.length) * charW;
+  const boxH = padY * 2 + lineH * 2 - 3;
+
+  let boxX = cx - boxW / 2;
+  boxX = Math.max(2, Math.min(boxX, CHART_W - boxW - 2));
+  let boxY = cy - 10 - boxH;
+  if (boxY < 2) boxY = cy + 10;
+
+  g.innerHTML = `
+    <rect class="chart-tooltip-bg" x="${boxX.toFixed(1)}" y="${boxY.toFixed(1)}" width="${boxW.toFixed(1)}" height="${boxH.toFixed(1)}" rx="6" />
+    <text class="chart-tooltip-text" x="${(boxX + boxW / 2).toFixed(1)}" y="${(boxY + padY + lineH - 3).toFixed(1)}" text-anchor="middle">${dateText}</text>
+    <text class="chart-tooltip-text muted" x="${(boxX + boxW / 2).toFixed(1)}" y="${(boxY + padY + lineH * 2 - 4).toFixed(1)}" text-anchor="middle">${paceText}</text>
+  `;
+}
+
+chartContainer.addEventListener("click", (e) => {
+  const circle = e.target.closest(".chart-dot");
+  if (circle) {
+    showChartTooltip(circle);
+  } else {
+    hideChartTooltip();
+  }
+});
+
+document.addEventListener("click", (e) => {
+  if (!chartContainer.contains(e.target)) hideChartTooltip();
+});
 
 const PENCIL_ICON = `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
 const TRASH_ICON = `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/></svg>`;

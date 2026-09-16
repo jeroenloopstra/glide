@@ -372,8 +372,32 @@ body {
 }
 
 .chart-dot {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.chart-dot-fill {
   stroke: var(--color-surface);
   stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.chart-tooltip-bg {
+  fill: var(--color-surface);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.chart-tooltip-text {
+  fill: var(--color-text);
+  font-size: 10.5px;
+  font-weight: 700;
+  font-family: -apple-system, "SF Pro Text", BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+.chart-tooltip-text.muted {
+  fill: var(--color-muted);
+  font-weight: 600;
 }
 
 .chart-legend {
